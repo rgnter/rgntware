@@ -3,6 +3,7 @@
 //
 
 #include "bot.hpp"
+#include <spdlog/fmt/fmt.h>
 #include <filesystem>
 
 
@@ -24,9 +25,12 @@ void rgntware::GuildMemory::store(const char *folder,
 
     nlohmann::json root{};
     for (const auto &guildData: this->m_data) {
-        root[std::to_string(guildData.first)] = guildData.second;
+        nlohmann::json entry;
+        entry["guild"] = guildData.first;
+        entry["settings"] = guildData.second;
+        root += entry;
     }
-    auto dump = root.dump(4);
+    auto dump = root.dump();
     file.write(dump.data(), dump.size());
     file.close();
 }
@@ -38,14 +42,25 @@ void rgntware::GuildMemory::load(const char *folder,
     path += std::filesystem::path::preferred_separator;
     path += fileName;
 
-    std::ifstream file(path);
-    file.seekg(0, std::ofstream::end);
-    auto length = file.tellg();
-    auto buffer = new char[length];
+    std::ifstream file(path, std::ios::binary);
+    if(!file.is_open())
+        return;
+    file.seekg(0, std::ios::end);
+    int64_t length = file.tellg();
+    file.seekg(0, std::ios::beg);
+    auto buffer = new char[length+1];
     file.read(buffer, length);
+    buffer[length] = 0;
 
-    auto root = nlohmann::json::parse(buffer);
-    root.size();
+    try {
+        auto root = nlohmann::json::parse(buffer);
+        for (const auto &entry : root) {
+            dpp::snowflake guild = entry["guild"];
+            this->m_data[guild] = entry["settings"];
+        }
+    } catch (const std::exception& x) {
+        spdlog::error("Can't read json settings.");
+    }
 }
 
 rgntware::Module::Module(const std::shared_ptr<dpp::cluster> &mCluster) : m_cluster(mCluster) {}

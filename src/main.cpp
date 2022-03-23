@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 
 int main(int argc, char **argv) {
+
     cxxopts::Options options{"rgntware", "rgntware is a shard."};
     options.add_options()
             ("t,token", "discord shard token", cxxopts::value<std::string>());
