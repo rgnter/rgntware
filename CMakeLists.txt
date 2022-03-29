@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(rgntware CXX)
+project(build/rgntware CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
@@ -27,7 +27,7 @@ find_package(spdlog)
 find_package(nlohmann_json)
 find_package(cxxopts)
 
-add_subdirectory(vendor/DPP)
+add_subdirectory(vendor/dpp)
 
 # Link Libraries
 link_libraries(spdlog::spdlog nlohmann_json::nlohmann_json cxxopts::cxxopts dpp)
@@ -36,7 +36,20 @@ link_libraries(spdlog::spdlog nlohmann_json::nlohmann_json cxxopts::cxxopts dpp)
 include_directories(vendor/DPP/include)
 include_directories(src/)
 
-add_executable(rgntware
+add_executable(build/rgntware
         src/main.cpp
         src/bot/bot.cpp src/bot/bot.hpp src/bot/modules.cpp src/bot/modules.hpp)
 
+if(WIN32)
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/vendor/dpp/win32/bin"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+
+    add_custom_command(
+            TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE_DIR:dpp>/dpp.dll"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+endif()

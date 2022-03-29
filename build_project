@@ -1,0 +1,6 @@
+sudo apt g++-8 ninja-build libsodium-dev libopus-dev zlib1g-dev rpm
+mkdir build
+cd build
+cmake .. . -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+echo done build

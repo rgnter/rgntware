@@ -36,6 +36,14 @@ void rgntware::tickets::Tickets::init() {
 
     // command interactions
     this->m_cluster->on_interaction_create([this](const dpp::interaction_create_t &event) {
+        auto is_admin = dpp::get_guild_cache()
+                                ->find(event.command.guild_id)
+                                ->base_permissions(&event.command.usr) & dpp::p_administrator;
+        if (!is_admin) {
+            event.reply(dpp::message("Nah. Not administrator.").set_flags(dpp::m_ephemeral));
+            return;
+        }
+
         if (event.command.get_command_name() == "set_ticket_category") {
             auto channelID = std::get<dpp::snowflake>(event.command.get_command_interaction().options[0].value);
             this->m_guildMemory[event.command.guild_id]["ticket_category"] = channelID;
@@ -73,10 +81,10 @@ void rgntware::tickets::Tickets::init() {
             auto placeholder = fmt::format("{}'s ticket", event.command.usr.username);
             modal.add_component(
                     dpp::component().
-                            set_label("Ticket Topic").
+                            set_label("Descriptive ticket topic").
                             set_id(TICKET_TOPIC).
                             set_type(dpp::cot_text).
-                            set_placeholder(placeholder).
+                            set_default_value(placeholder).
                             set_min_length(5).
                             set_max_length(32).
                             set_text_style(dpp::text_short)
@@ -104,6 +112,7 @@ void rgntware::tickets::Tickets::init() {
             auto findIdentifiedComponent = [&topic, &set](const dpp::component &component) {
                 if (component.custom_id == TICKET_TOPIC) {
                     topic = std::get<std::string>(component.value);
+
                     set = true;
                 }
             };
@@ -147,20 +156,29 @@ void rgntware::tickets::Tickets::create_ticket(const rgntware::tickets::Ticket &
         channel.guild_id = ticket.guild;
 
         this->m_cluster->channel_create(channel, [this, ticket](const dpp::confirmation_callback_t &event) {
-            const auto channel = std::get<dpp::channel>(event.value);
+            auto channel = std::get<dpp::channel>(event.value);
             // update ticket channel id
             this->tickets[channel.guild_id].second[ticket.owner].channel = channel.id;
+
+            channel.add_permission_overwrite(ticket.owner, 1, dpp::p_send_messages | dpp::p_view_channel, 0);
+            this->m_cluster->channel_edit(channel);
+
 
             // send interaction panel
             this->m_cluster->message_create(dpp::message(channel.id, "")
                                                     .add_embed(dpp::embed()
                                                                        .set_color(0x777777)
-                                                                       .set_description("Somebody from the support team, will be with you shortly."))
+                                                                       .set_description(fmt::format(
+                                                                               "This is your ticket <@{}>. Somebody from the support team, will be with you shortly.",
+                                                                               ticket.owner)))
                                                     .add_component(dpp::component()
                                                                            .add_component(dpp::component()
-                                                                                                  .set_label("Close ticket")
-                                                                                                  .set_type(dpp::cot_button)
-                                                                                                  .set_style(dpp::cos_danger)
+                                                                                                  .set_label(
+                                                                                                          "Close ticket")
+                                                                                                  .set_type(
+                                                                                                          dpp::cot_button)
+                                                                                                  .set_style(
+                                                                                                          dpp::cos_danger)
                                                                                                   .set_id(TICKET_DELETE))));
         });
 
@@ -175,4 +193,60 @@ void rgntware::tickets::Tickets::delete_ticket(const dpp::snowflake &guild, cons
         auto ticket = guildData.second[owner];
         this->m_cluster->channel_delete(ticket.channel);
     }
+}
+
+
+rgntware::autorole::AutoRole::AutoRole(const std::shared_ptr<dpp::cluster> &mCluster) : Module(mCluster) {
+
+}
+
+void rgntware::autorole::AutoRole::init() {
+    this->m_guildMemory.load("data/autorole", "settings.json");
+    // commands
+    this->m_cluster->on_ready([this](const dpp::ready_t &event) {
+        if (dpp::run_once<struct autorole_register_commands>()) {
+            {
+                auto defaultRole = dpp::slashcommand("set_default_role", "Sets default role",
+                                                     this->m_cluster->me.id)
+                        .add_option(dpp::command_option(dpp::co_role, "role", "Guild role to assign when new person joins. Make sure this role is below bot role.", true));
+
+                for (const auto &guild: this->m_cluster->current_user_get_guilds_sync()) {
+                    this->m_cluster->guild_command_create(defaultRole, guild.first);
+                }
+            }
+        }
+    });
+
+    // command interactions
+    this->m_cluster->on_interaction_create([this](const dpp::interaction_create_t &event) {
+        auto is_admin = dpp::get_guild_cache()
+                                ->find(event.command.guild_id)
+                                ->base_permissions(&event.command.usr) & dpp::p_administrator;
+        if (!is_admin) {
+            event.reply(dpp::message("Nah. Not administrator.").set_flags(dpp::m_ephemeral));
+            return;
+        }
+
+        auto &command = event.command;
+        if (event.command.get_command_name() == "set_default_role") {
+            auto role_id = std::get<dpp::snowflake>(
+                    command.get_command_interaction().options[0].value
+            );
+            this->m_guildMemory[command.guild_id]["default_role"] = role_id;
+            event.reply(dpp::message("Sure. Closing ticket.").set_flags(dpp::m_ephemeral));
+        }
+    });
+
+    // join handlers
+    this->m_cluster->on_guild_member_add([this](const dpp::guild_member_add_t &event) {
+        auto role = this->m_guildMemory[event.adding_guild->id]["default_role"].get<dpp::snowflake>();
+        this->m_cluster->guild_member_add_role(event.adding_guild->id,
+                                               event.added.user_id,
+                                               role
+        );
+    });
+}
+
+void rgntware::autorole::AutoRole::term() {
+    this->m_guildMemory.store("data/autorole", "settings.json");
 }

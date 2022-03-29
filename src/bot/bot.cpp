@@ -3,9 +3,9 @@
 //
 
 #include "bot.hpp"
-#include <spdlog/fmt/fmt.h>
-#include <filesystem>
 
+#include <filesystem>
+#include <spdlog/fmt/fmt.h>
 
 nlohmann::json &rgntware::GuildMemory::operator[](const dpp::snowflake &id) {
     if (!this->m_data.contains(id))
@@ -43,22 +43,22 @@ void rgntware::GuildMemory::load(const char *folder,
     path += fileName;
 
     std::ifstream file(path, std::ios::binary);
-    if(!file.is_open())
+    if (!file.is_open())
         return;
     file.seekg(0, std::ios::end);
     int64_t length = file.tellg();
     file.seekg(0, std::ios::beg);
-    auto buffer = new char[length+1];
+    auto buffer = new char[length + 1];
     file.read(buffer, length);
     buffer[length] = 0;
 
     try {
         auto root = nlohmann::json::parse(buffer);
-        for (const auto &entry : root) {
+        for (const auto &entry: root) {
             dpp::snowflake guild = entry["guild"];
             this->m_data[guild] = entry["settings"];
         }
-    } catch (const std::exception& x) {
+    } catch (const std::exception &x) {
         spdlog::error("Can't read json settings.");
     }
 }
@@ -67,28 +67,55 @@ rgntware::Module::Module(const std::shared_ptr<dpp::cluster> &mCluster) : m_clus
 
 rgntware::Bot::Bot(const std::string &mToken)
         : m_token(mToken) {
-    this->m_cluster = std::make_shared<dpp::cluster>(this->m_token, dpp::i_default_intents | dpp::i_message_content);
-    this->m_cluster->on_message_create([](const dpp::message_create_t& event) {
-        if(event.msg.content == "<3") {
-            event.reply(":heart:²");
-        }
-    });
+    this->m_cluster = std::make_shared<dpp::cluster>(this->m_token, dpp::i_guild_members
+                                                                    | dpp::i_message_content
+                                                                    | dpp::i_default_intents
+
+    );
+
+//    this->m_cluster->on_log([this](const dpp::log_t & event) {
+//        switch (event.severity) {
+//            case dpp::ll_trace:
+//                spdlog::trace(fmt::format("{}", event.message));
+//                break;
+//            case dpp::ll_debug:
+//                spdlog::debug(fmt::format("{}", event.message));
+//                break;
+//            case dpp::ll_info:
+//                spdlog::info(fmt::format("{}", event.message));
+//                break;
+//            case dpp::ll_warning:
+//                spdlog::warn(fmt::format("{}", event.message));
+//                break;
+//            case dpp::ll_error:
+//                spdlog::error(fmt::format("{}", event.message));
+//                break;
+//            case dpp::ll_critical:
+//            default:
+//                spdlog::critical(fmt::format("{}", event.message));
+//                break;
+//        }
+//    });
 }
 
 void rgntware::Bot::init() {
-    for (auto &module : this->m_modules) {
+    for (auto &module: this->m_modules) {
         module->init();
     }
-    this->m_cluster->start();
+    try {
+        this->m_cluster->start();
+    } catch (const std::exception &x) {
+        spdlog::error("error");
+    }
 }
 
 void rgntware::Bot::term() {
-    for (auto &module : this->m_modules) {
+    for (auto &module: this->m_modules) {
         module->term();
     }
 }
 
-void rgntware::Bot::add_module(const std::shared_ptr<rgntware::Module>& module) {
+void rgntware::Bot::add_module(const std::shared_ptr<rgntware::Module> &module) {
     this->m_modules.push_back(module);
 }
 
